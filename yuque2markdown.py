@@ -43,14 +43,12 @@ def sanitizer_file_name(name):
 
 
 def read_toc(random_tmp_dir):
-    # open meta json
-    f = open(os.path.join(random_tmp_dir, META_JSON), "r")
-    meta_file_str = json.loads(f.read())
-    meta_str = meta_file_str.get("meta", "")
-    meta = json.loads(meta_str)
-    toc_str = meta.get("book", {}).get("tocYml", "")
-    toc = yaml.unsafe_load(toc_str)
-    f.close()
+    with open(os.path.join(random_tmp_dir, META_JSON), "r") as f:
+        meta_file_str = json.loads(f.read())
+        meta_str = meta_file_str.get("meta", "")
+        meta = json.loads(meta_str)
+        toc_str = meta.get("book", {}).get("tocYml", "")
+        toc = yaml.unsafe_load(toc_str)
     return toc
 
 
@@ -63,12 +61,12 @@ def extract_repos(repo_dir, output, toc, download_image):
         url = str(item.get("url", ""))
         current_level = item.get("level", 0)
         title = str(item.get("title", ""))
-        sanitized_title = sanitizer_file_name(str(title))
+        sanitized_title = sanitizer_file_name(title)
         if not title:
             continue
         while True:
             if os.path.exists(os.path.join(output, sanitized_title)):
-                sanitized_title = sanitizer_file_name(str(title)) + str(
+                sanitized_title = sanitizer_file_name(title) + str(
                     random.randint(0, 1000)
                 )
             break
@@ -77,14 +75,14 @@ def extract_repos(repo_dir, output, toc, download_image):
             path_prefixed = path_prefixed + [last_sanitized_title]
         elif current_level < last_level:
             diff = last_level - current_level
-            path_prefixed = path_prefixed[0:-diff]
+            path_prefixed = path_prefixed[:-diff]
 
         # else:
         if t == TYPE_DOC:
             output_dir_path = os.path.join(output, *path_prefixed)
             if not os.path.exists(output_dir_path):
                 os.makedirs(output_dir_path)
-            raw_path = os.path.join(repo_dir, url + ".json")
+            raw_path = os.path.join(repo_dir, f"{url}.json")
             raw_file = open(raw_path, "r")
             doc_str = json.loads(raw_file.read())
             html = doc_str["doc"]["body"] or doc_str["doc"]["body_asl"]
@@ -94,7 +92,7 @@ def extract_repos(repo_dir, output, toc, download_image):
                     output_dir_path, sanitized_title, html
                 )
 
-            output_path = os.path.join(output_dir_path, sanitized_title + ".md")
+            output_path = os.path.join(output_dir_path, f"{sanitized_title}.md")
             f = open(output_path, "w")
             f.write(pretty_md(md(html, heading_style=DEFAULT_HEADING_STYLE)))
 
@@ -110,7 +108,7 @@ def download_images_and_patch_html(output_dir_path, sanitized_title, html):
             os.mkdir(attachments_dir_path)
         no = 1
         for image in bs.find_all("img"):
-            print("Download %s" % image["src"])
+            print(f'Download {image["src"]}')
             resp = get(image["src"])
             file_name = sanitized_title + "_%03d%s" % (
                 no,
@@ -120,11 +118,9 @@ def download_images_and_patch_html(output_dir_path, sanitized_title, html):
             with open(attachments_file_path, "wb") as f:
                 f.write(resp.content)
             no = no + 1
-            image["src"] = "./attachments/" + file_name
+            image["src"] = f"./attachments/{file_name}"
         html = str(bs)
-        return html
-    else:
-        return html
+    return html
 
 
 def pretty_md(text: str) -> str:
@@ -135,7 +131,7 @@ def pretty_md(text: str) -> str:
         lines[i] = lines[i].rstrip()
     output = "\n".join(lines)
 
-    for i in range(50):
+    for _ in range(50):
         output = output.replace("\n\n\n", "\n\n")
         if "\n\n\n" not in output:
             break
@@ -152,13 +148,13 @@ def main():
     )
     args = parser.parse_args()
     if not os.path.exists(args.lakebook):
-        print("Lakebook file not found: " + args.lakebook)
+        print(f"Lakebook file not found: {args.lakebook}")
         sys.exit(1)
     if not os.path.exists(args.output):
         os.mkdir(args.output)
 
     # extract lakebook file
-    random_tmp_dir = os.path.join(TMP_DIR, "lakebook_" + str(os.getpid()))
+    random_tmp_dir = os.path.join(TMP_DIR, f"lakebook_{os.getpid()}")
     extract_tar(args.lakebook, random_tmp_dir)
     # detect only one directory in random_tmp_dir
     repo_dir = ""
@@ -172,7 +168,7 @@ def main():
 
     toc = read_toc(repo_dir)
     # print len of toc
-    print("Total " + str(len(toc)) + " files")
+    print(f"Total {len(toc)} files")
 
     extract_repos(repo_dir, args.output, toc, args.download_image)
 
